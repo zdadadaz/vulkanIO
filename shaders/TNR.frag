@@ -1,3 +1,4 @@
+```glsl
 #version 450
 
 layout(binding = 0) uniform sampler2D sRT_RMOut;
@@ -5,6 +6,7 @@ layout(binding = 1) uniform sampler2D sRT_DepthDS;
 layout(binding = 2) uniform sampler2D sRT_MV;
 layout(binding = 3) uniform sampler2D sRT_TNRPrev0;
 layout(binding = 4) uniform sampler2D sRT_TNRPrev1_prev;
+layout(binding = 5) uniform sampler2D sRT_OriginalColor;
 
 layout(location = 0) in vec2 fragTexCoord;
 

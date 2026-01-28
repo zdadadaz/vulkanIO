@@ -991,10 +991,19 @@ void VulkanRenderer::createFinalDescriptorSetLayout() {
     samplerLayoutBinding.pImmutableSamplers = nullptr;
     samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
+    VkDescriptorSetLayoutBinding colorLayoutBinding{};
+    colorLayoutBinding.binding = 1;
+    colorLayoutBinding.descriptorCount = 1;
+    colorLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    colorLayoutBinding.pImmutableSamplers = nullptr;
+    colorLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+    VkDescriptorSetLayoutBinding bindings[] = {samplerLayoutBinding, colorLayoutBinding};
+
     VkDescriptorSetLayoutCreateInfo layoutInfo{};
     layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    layoutInfo.bindingCount = 1;
-    layoutInfo.pBindings = &samplerLayoutBinding;
+    layoutInfo.bindingCount = 2;
+    layoutInfo.pBindings = bindings;
 
     if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &finalDescriptorSetLayout) != VK_SUCCESS) {
         throw std::runtime_error("failed to create final descriptor set layout!");
@@ -1174,20 +1183,32 @@ void VulkanRenderer::createDescriptorSets() {
 
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
         // Initial binding (will be updated dynamically if needed)
-        VkDescriptorImageInfo imageInfo{};
-        imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        imageInfo.imageView = snrImageViews[0]; // Placeholder
-        imageInfo.sampler = offscreenSampler;
+        VkDescriptorImageInfo snrInfo{};
+        snrInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        snrInfo.imageView = snrImageViews[0]; // Logic needs to ensure this points to valid SNR output
+        snrInfo.sampler = offscreenSampler;
 
-        VkWriteDescriptorSet descriptorWrite{};
-        descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        descriptorWrite.dstSet = finalDescriptorSets[i];
-        descriptorWrite.dstBinding = 0;
-        descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        descriptorWrite.descriptorCount = 1;
-        descriptorWrite.pImageInfo = &imageInfo;
+        VkDescriptorImageInfo colorInfo{};
+        colorInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        colorInfo.imageView = textureImageView;
+        colorInfo.sampler = textureSampler;
 
-        vkUpdateDescriptorSets(device, 1, &descriptorWrite, 0, nullptr);
+        VkWriteDescriptorSet writes[2]{};
+        writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        writes[0].dstSet = finalDescriptorSets[i];
+        writes[0].dstBinding = 0;
+        writes[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        writes[0].descriptorCount = 1;
+        writes[0].pImageInfo = &snrInfo;
+
+        writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        writes[1].dstSet = finalDescriptorSets[i];
+        writes[1].dstBinding = 1;
+        writes[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        writes[1].descriptorCount = 1;
+        writes[1].pImageInfo = &colorInfo;
+
+        vkUpdateDescriptorSets(device, 2, writes, 0, nullptr);
     }
 }
 
@@ -2092,8 +2113,8 @@ void VulkanRenderer::createTNRResources() {
     }
 
     // 3. Descriptor Set Layout
-    VkDescriptorSetLayoutBinding bindings[5]{};
-    for(int i=0; i<5; i++) {
+    VkDescriptorSetLayoutBinding bindings[6]{};
+    for(int i=0; i<6; i++) {
         bindings[i].binding = i;
         bindings[i].descriptorCount = 1;
         bindings[i].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -2102,7 +2123,7 @@ void VulkanRenderer::createTNRResources() {
 
     VkDescriptorSetLayoutCreateInfo layoutInfo{};
     layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    layoutInfo.bindingCount = 5;
+    layoutInfo.bindingCount = 6;
     layoutInfo.pBindings = bindings;
 
     if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &tnrDescriptorSetLayout) != VK_SUCCESS) {
@@ -2242,16 +2263,18 @@ void VulkanRenderer::createSNRResources() {
     }
 
     // 3. Descriptor Set Layout
-    VkDescriptorSetLayoutBinding binding{};
-    binding.binding = 0;
-    binding.descriptorCount = 1;
-    binding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    VkDescriptorSetLayoutBinding bindings[3]{};
+    for(int i=0; i<3; i++) {
+        bindings[i].binding = i;
+        bindings[i].descriptorCount = 1;
+        bindings[i].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        bindings[i].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    }
 
     VkDescriptorSetLayoutCreateInfo layoutInfo{};
     layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    layoutInfo.bindingCount = 1;
-    layoutInfo.pBindings = &binding;
+    layoutInfo.bindingCount = 3;
+    layoutInfo.pBindings = bindings;
 
     if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &snrDescriptorSetLayout) != VK_SUCCESS) {
         throw std::runtime_error("failed to create SNR descriptor set layout!");
@@ -2361,9 +2384,10 @@ void VulkanRenderer::createTNRDescriptorSets() {
         // History color comes from SNR output
         VkDescriptorImageInfo prevColorInfo{offscreenSampler, snrImageViews[historyIdx], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
         VkDescriptorImageInfo prevInfoInfo{offscreenSampler, tnrInfoImageViews[historyIdx], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+        VkDescriptorImageInfo colorInfo{textureSampler, textureImageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
 
-        VkWriteDescriptorSet writes[5]{};
-        for(int j=0; j<5; j++) {
+        VkWriteDescriptorSet writes[6]{};
+        for(int j=0; j<6; j++) {
             writes[j].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             writes[j].dstSet = tnrDescriptorSets[i];
             writes[j].dstBinding = j;
@@ -2375,8 +2399,9 @@ void VulkanRenderer::createTNRDescriptorSets() {
         writes[2].pImageInfo = &mvInfo;
         writes[3].pImageInfo = &prevColorInfo;
         writes[4].pImageInfo = &prevInfoInfo;
+        writes[5].pImageInfo = &colorInfo;
 
-        vkUpdateDescriptorSets(device, 5, writes, 0, nullptr);
+        vkUpdateDescriptorSets(device, 6, writes, 0, nullptr);
     }
 }
 
@@ -2396,15 +2421,36 @@ void VulkanRenderer::createSNRDescriptorSets() {
 
     for (uint32_t i = 0; i < setCount; i++) {
         VkDescriptorImageInfo tnrOutInfo{offscreenSampler, tnrIntermediateColorImageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+        VkDescriptorImageInfo metaInfo{depthTextureSampler, depthDSImageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+        // TNR writes to '1 - historyIdx'. So SNR reads from '1 - historyIdx' of current frame.
+        // Assuming 'i' is current frame index.
+        uint32_t currentHistoryIdx = i % 2; 
+        uint32_t readIdx = 1 - currentHistoryIdx;
+        VkDescriptorImageInfo tnrAuxInfo{offscreenSampler, tnrInfoImageViews[readIdx], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
 
-        VkWriteDescriptorSet write{};
-        write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        write.dstSet = snrDescriptorSets[i];
-        write.dstBinding = 0;
-        write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        write.descriptorCount = 1;
-        write.pImageInfo = &tnrOutInfo;
+        VkWriteDescriptorSet writes[3]{};
+        
+        writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        writes[0].dstSet = snrDescriptorSets[i];
+        writes[0].dstBinding = 0;
+        writes[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        writes[0].descriptorCount = 1;
+        writes[0].pImageInfo = &tnrOutInfo;
 
-        vkUpdateDescriptorSets(device, 1, &write, 0, nullptr);
+        writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        writes[1].dstSet = snrDescriptorSets[i];
+        writes[1].dstBinding = 1;
+        writes[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        writes[1].descriptorCount = 1;
+        writes[1].pImageInfo = &metaInfo;
+
+        writes[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        writes[2].dstSet = snrDescriptorSets[i];
+        writes[2].dstBinding = 2;
+        writes[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        writes[2].descriptorCount = 1;
+        writes[2].pImageInfo = &tnrAuxInfo;
+
+        vkUpdateDescriptorSets(device, 3, writes, 0, nullptr);
     }
 }
