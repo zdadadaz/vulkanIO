@@ -1185,7 +1185,7 @@ void VulkanRenderer::createDescriptorSets() {
         // Initial binding (will be updated dynamically if needed)
         VkDescriptorImageInfo snrInfo{};
         snrInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        snrInfo.imageView = snrImageViews[0]; // Logic needs to ensure this points to valid SNR output
+        snrInfo.imageView = depthDSImageView; // DEBUG: Show depthDS output
         snrInfo.sampler = offscreenSampler;
 
         VkDescriptorImageInfo colorInfo{};
@@ -1516,7 +1516,8 @@ void VulkanRenderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
     resultWrite.descriptorCount = 1;
     resultWrite.pImageInfo = &resultInfo;
 
-    vkUpdateDescriptorSets(device, 1, &resultWrite, 0, nullptr);
+    // DEBUG: Disable updating final descriptor set to keep showing depthDS
+    // vkUpdateDescriptorSets(device, 1, &resultWrite, 0, nullptr);
 
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, finalPipelineLayout, 0, 1, &finalDescriptorSets[currentFrame], 0, nullptr);
     vkCmdDraw(commandBuffer, 6, 1, 0, 0);
