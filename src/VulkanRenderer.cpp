@@ -122,6 +122,8 @@ void VulkanRenderer::initVulkan() {
     createDescriptorSets();     // Allocate and update descriptor sets (bind images to shaders).
     createTNRDescriptorSets();
     createSNRDescriptorSets();
+    createSNR2Resources();
+    createSNR2DescriptorSets();
     
     createSyncObjects();        // Create semaphores and fences for frame synchronization.
 }
@@ -222,6 +224,17 @@ void VulkanRenderer::cleanup() {
         vkDestroyImageView(device, snrImageViews[i], nullptr);
         vkDestroyImage(device, snrImages[i], nullptr);
         vkFreeMemory(device, snrImageMemories[i], nullptr);
+    }
+
+    vkDestroyPipeline(device, snr2Pipeline, nullptr);
+    vkDestroyPipelineLayout(device, snr2PipelineLayout, nullptr);
+    vkDestroyRenderPass(device, snr2RenderPass, nullptr);
+    vkDestroyDescriptorSetLayout(device, snr2DescriptorSetLayout, nullptr);
+    for (int i = 0; i < 2; i++) {
+        vkDestroyFramebuffer(device, snr2Framebuffers[i], nullptr);
+        vkDestroyImageView(device, snr2ImageViews[i], nullptr);
+        vkDestroyImage(device, snr2Images[i], nullptr);
+        vkFreeMemory(device, snr2ImageMemories[i], nullptr);
     }
 
     vkDestroySampler(device, mvTextureSampler, nullptr);
@@ -1512,6 +1525,41 @@ void VulkanRenderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
     vkCmdDraw(commandBuffer, 6, 1, 0, 0);
     vkCmdEndRenderPass(commandBuffer);
 
+    // --- Pass 3.5: SNR2 ---
+    VkDescriptorImageInfo snrOutInfo{};
+    snrOutInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    snrOutInfo.imageView = snrImageViews[1 - tnrHistoryIndex];
+    snrOutInfo.sampler = offscreenSampler;
+
+    VkWriteDescriptorSet snr2Write{};
+    snr2Write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    snr2Write.dstSet = snr2DescriptorSets[currentFrame];
+    snr2Write.dstBinding = 0;
+    snr2Write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    snr2Write.descriptorCount = 1;
+    snr2Write.pImageInfo = &snrOutInfo;
+    vkUpdateDescriptorSets(device, 1, &snr2Write, 0, nullptr);
+
+    VkRenderPassBeginInfo snr2RenderPassInfo{};
+    snr2RenderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    snr2RenderPassInfo.renderPass = snr2RenderPass;
+    snr2RenderPassInfo.framebuffer = snr2Framebuffers[1 - tnrHistoryIndex];
+    snr2RenderPassInfo.renderArea.offset = {0, 0};
+    snr2RenderPassInfo.renderArea.extent = {RM_WIDTH, RM_HEIGHT};
+
+    snr2RenderPassInfo.clearValueCount = 1;
+    snr2RenderPassInfo.pClearValues = &clearColor;
+
+    vkCmdBeginRenderPass(commandBuffer, &snr2RenderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, snr2Pipeline);
+
+    vkCmdSetViewport(commandBuffer, 0, 1, &rmViewport);
+    vkCmdSetScissor(commandBuffer, 0, 1, &rmScissor);
+
+    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, snr2PipelineLayout, 0, 1, &snr2DescriptorSets[currentFrame], 0, nullptr);
+    vkCmdDraw(commandBuffer, 6, 1, 0, 0);
+    vkCmdEndRenderPass(commandBuffer);
+
     // --- Pass 4: Final Upscale ---
     VkRenderPassBeginInfo renderPassInfo{};
     renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -1543,7 +1591,7 @@ void VulkanRenderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
     // Update final descriptor set to read from the TNR output (TNR_out0)
     VkDescriptorImageInfo resultInfo{};
     resultInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    resultInfo.imageView = tnrIntermediateColorImageView; // TNR_out0
+    resultInfo.imageView = snr2ImageViews[1 - tnrHistoryIndex]; // SNR2_out0
     resultInfo.sampler = offscreenSampler;
 
     VkWriteDescriptorSet resultWrite{};
@@ -2548,5 +2596,179 @@ void VulkanRenderer::createSNRDescriptorSets() {
         writes[2].pImageInfo = &tnrAuxInfo;
 
         vkUpdateDescriptorSets(device, 3, writes, 0, nullptr);
+    }
+}
+
+void VulkanRenderer::createSNR2Resources() {
+    // 1. Render Pass
+    VkAttachmentDescription colorAttachment{};
+    colorAttachment.format = VK_FORMAT_R16G16B16A16_SFLOAT;
+    colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+    colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    colorAttachment.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+    VkAttachmentReference colorReference = {0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+
+    VkSubpassDescription subpass{};
+    subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    subpass.colorAttachmentCount = 1;
+    subpass.pColorAttachments = &colorReference;
+
+    VkRenderPassCreateInfo renderPassInfo{};
+    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+    renderPassInfo.attachmentCount = 1;
+    renderPassInfo.pAttachments = &colorAttachment;
+    renderPassInfo.subpassCount = 1;
+    renderPassInfo.pSubpasses = &subpass;
+
+    if (vkCreateRenderPass(device, &renderPassInfo, nullptr, &snr2RenderPass) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create SNR2 render pass!");
+    }
+
+    // 2. Images
+    for (int i = 0; i < 2; i++) {
+        createImage(RM_WIDTH, RM_HEIGHT, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, snr2Images[i], snr2ImageMemories[i]);
+        snr2ImageViews[i] = createImageView(snr2Images[i], VK_FORMAT_R16G16B16A16_SFLOAT);
+        transitionImageLayout(snr2Images[i], VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+        VkFramebufferCreateInfo framebufferInfo{};
+        framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+        framebufferInfo.renderPass = snr2RenderPass;
+        framebufferInfo.attachmentCount = 1;
+        framebufferInfo.pAttachments = &snr2ImageViews[i];
+        framebufferInfo.width = RM_WIDTH;
+        framebufferInfo.height = RM_HEIGHT;
+        framebufferInfo.layers = 1;
+
+        if (vkCreateFramebuffer(device, &framebufferInfo, nullptr, &snr2Framebuffers[i]) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create SNR2 framebuffer!");
+        }
+    }
+
+    // 3. Descriptor Set Layout
+    VkDescriptorSetLayoutBinding binding{};
+    binding.binding = 0;
+    binding.descriptorCount = 1;
+    binding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+    VkDescriptorSetLayoutCreateInfo layoutInfo{};
+    layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    layoutInfo.bindingCount = 1;
+    layoutInfo.pBindings = &binding;
+
+    if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &snr2DescriptorSetLayout) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create SNR2 descriptor set layout!");
+    }
+
+    // 4. Pipeline
+    auto snr2FragCode = readFile(std::string(SHADER_DIR) + "/SNR2.frag.spv");
+    VkShaderModule snr2FragModule = createShaderModule(snr2FragCode);
+    
+    auto vertShaderCode = readFile(std::string(SHADER_DIR) + "/shader.vert.spv");
+    VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
+
+    VkPipelineShaderStageCreateInfo stages[2]{};
+    stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
+    stages[0].module = vertShaderModule;
+    stages[0].pName = "main";
+    stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+    stages[1].module = snr2FragModule;
+    stages[1].pName = "main";
+
+    VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
+    vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+    VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
+    inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+    inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    VkPipelineViewportStateCreateInfo viewportState{};
+    viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+    viewportState.viewportCount = 1;
+    viewportState.scissorCount = 1;
+    VkPipelineRasterizationStateCreateInfo rasterizer{};
+    rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+    rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
+    rasterizer.lineWidth = 1.0f;
+    rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
+    rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
+    VkPipelineMultisampleStateCreateInfo multisampling{};
+    multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+    multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+    VkPipelineColorBlendAttachmentState blendAttachment{};
+    blendAttachment.colorWriteMask = 0xF;
+    VkPipelineColorBlendStateCreateInfo colorBlending{};
+    colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+    colorBlending.attachmentCount = 1;
+    colorBlending.pAttachments = &blendAttachment;
+    VkDynamicState dynamicStates[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
+    VkPipelineDynamicStateCreateInfo dynamicState{};
+    dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+    dynamicState.dynamicStateCount = 2;
+    dynamicState.pDynamicStates = dynamicStates;
+
+    VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
+    pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    pipelineLayoutInfo.setLayoutCount = 1;
+    pipelineLayoutInfo.pSetLayouts = &snr2DescriptorSetLayout;
+
+    if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &snr2PipelineLayout) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create SNR2 pipeline layout!");
+    }
+
+    VkGraphicsPipelineCreateInfo pipelineInfo{};
+    pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    pipelineInfo.stageCount = 2;
+    pipelineInfo.pStages = stages;
+    pipelineInfo.pVertexInputState = &vertexInputInfo;
+    pipelineInfo.pInputAssemblyState = &inputAssembly;
+    pipelineInfo.pViewportState = &viewportState;
+    pipelineInfo.pRasterizationState = &rasterizer;
+    pipelineInfo.pMultisampleState = &multisampling;
+    pipelineInfo.pColorBlendState = &colorBlending;
+    pipelineInfo.pDynamicState = &dynamicState;
+    pipelineInfo.layout = snr2PipelineLayout;
+    pipelineInfo.renderPass = snr2RenderPass;
+    pipelineInfo.subpass = 0;
+
+    if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &snr2Pipeline) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create SNR2 graphics pipeline!");
+    }
+
+    vkDestroyShaderModule(device, snr2FragModule, nullptr);
+    vkDestroyShaderModule(device, vertShaderModule, nullptr);
+}
+
+void VulkanRenderer::createSNR2DescriptorSets() {
+    uint32_t setCount = MAX_FRAMES_IN_FLIGHT;
+    std::vector<VkDescriptorSetLayout> layouts(setCount, snr2DescriptorSetLayout);
+    VkDescriptorSetAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocInfo.descriptorPool = descriptorPool;
+    allocInfo.descriptorSetCount = setCount;
+    allocInfo.pSetLayouts = layouts.data();
+
+    snr2DescriptorSets.resize(setCount);
+    if (vkAllocateDescriptorSets(device, &allocInfo, snr2DescriptorSets.data()) != VK_SUCCESS) {
+        throw std::runtime_error("failed to allocate SNR2 descriptor sets!");
+    }
+
+    for (uint32_t i = 0; i < setCount; i++) {
+        // Initial binding, will be updated in drawFrame
+        VkDescriptorImageInfo snrInfo{offscreenSampler, snrImageViews[0], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+        VkWriteDescriptorSet write{};
+        write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        write.dstSet = snr2DescriptorSets[i];
+        write.dstBinding = 0;
+        write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        write.descriptorCount = 1;
+        write.pImageInfo = &snrInfo;
+
+        vkUpdateDescriptorSets(device, 1, &write, 0, nullptr);
     }
 }

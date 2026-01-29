@@ -163,6 +163,18 @@ private:
     VkImageView snrImageViews[2];
     VkFramebuffer snrFramebuffers[2];
 
+    // SNR2 Pass
+    VkRenderPass snr2RenderPass;
+    VkPipeline snr2Pipeline;
+    VkPipelineLayout snr2PipelineLayout;
+    VkDescriptorSetLayout snr2DescriptorSetLayout;
+    std::vector<VkDescriptorSet> snr2DescriptorSets;
+
+    VkImage snr2Images[2];
+    VkDeviceMemory snr2ImageMemories[2];
+    VkImageView snr2ImageViews[2];
+    VkFramebuffer snr2Framebuffers[2];
+
     // MV Texture Resources
     VkImage mvTextureImage;
     VkDeviceMemory mvTextureImageMemory;
@@ -225,6 +237,9 @@ private:
 
     void createSNRResources();
     void createSNRDescriptorSets();
+
+    void createSNR2Resources();
+    void createSNR2DescriptorSets();
 
     // Rendering
     void drawFrame();

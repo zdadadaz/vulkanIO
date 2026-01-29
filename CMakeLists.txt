@@ -23,6 +23,7 @@ set(SHADERS
     ${SHADER_DIR}/depthDS.frag
     ${SHADER_DIR}/TNR.frag
     ${SHADER_DIR}/SNR.frag
+    ${SHADER_DIR}/SNR2.frag
 )
 
 foreach(SHADER ${SHADERS})
