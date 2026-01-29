@@ -85,6 +85,14 @@ private:
     VkSampler normalTextureSampler;
     VkBuffer normalStagingBuffer;
     VkDeviceMemory normalStagingBufferMemory;
+
+    // Albedo Texture Resources (New)
+    VkImage albedoTextureImage;
+    VkDeviceMemory albedoTextureImageMemory;
+    VkImageView albedoTextureImageView;
+    VkSampler albedoTextureSampler;
+    VkBuffer albedoStagingBuffer;
+    VkDeviceMemory albedoStagingBufferMemory;
     
     // Offscreen (Low-Res RM)
     VkImage offscreenImage;
@@ -199,6 +207,10 @@ private:
     void createNormalTextureImage();
     void createNormalTextureImageView();
     void createNormalTextureSampler();
+
+    void createAlbedoTextureImage();
+    void createAlbedoTextureImageView();
+    void createAlbedoTextureSampler();
 
     void createMVTextureImage();
     void createMVTextureImageView();

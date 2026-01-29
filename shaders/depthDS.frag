@@ -3,6 +3,7 @@
 layout(binding = 0) uniform sampler2D depthSampler;
 layout(binding = 1) uniform sampler2D albedoSampler;
 layout(binding = 2) uniform sampler2D normalSampler;
+layout(binding = 3) uniform sampler2D newAlbedoSampler;
 
 layout(location = 0) in vec2 fragTexCoord;
 
@@ -24,8 +25,9 @@ void main() {
     
     // 4. Sample normal and albedo to get their W components (masks/roughness usually)
     vec4 normal = texture(normalSampler, fragTexCoord);
-    vec4 albedo = texture(albedoSampler, fragTexCoord);
+    // vec4 albedo = texture(albedoSampler, fragTexCoord);
+    vec4 newAlbedo = texture(newAlbedoSampler, fragTexCoord);
     
-    // Output: R = LinearDepth, G = Normal.w, B = Albedo.w
-    outData = vec4(depthNorm, normal.w, albedo.w, 1.0);
+    // Output: R = LinearDepth, G = Normal.w, B = NewAlbedo.w
+    outData = vec4(depthNorm, normal.w, newAlbedo.w, 1.0);
 }

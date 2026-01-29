@@ -23,6 +23,7 @@ const std::vector<const char*> deviceExtensions = {
 const std::string COLOR_PATH_PREFIX  = "nvt_2026_01_23_11_43_31_45/color_input_0_";
 const std::string DEPTH_PATH_PREFIX  = "nvt_2026_01_23_11_43_31_45/depth_input_0_";
 const std::string NORMAL_PATH_PREFIX = "nvt_2026_01_23_11_43_31_45/normal_input_0_";
+const std::string ALBEDO_PATH_PREFIX = "nvt_2026_01_23_11_43_31_45/albedo_0_"; // New Path
 const std::string MV_PATH_PREFIX     = "nvt_2026_01_23_11_43_31_45/mv_input_0_";
 const std::string FILE_EXTENSION = ".raw";
 const uint32_t FILE_STRIDE = 4; // 4 bytes per pixel (RGBA)
@@ -106,6 +107,10 @@ void VulkanRenderer::initVulkan() {
     createNormalTextureImageView();
     createNormalTextureSampler();
     
+    createAlbedoTextureImage();
+    createAlbedoTextureImageView();
+    createAlbedoTextureSampler();
+    
     createMVTextureImage();
     createMVTextureImageView();
     createMVTextureSampler();
@@ -153,6 +158,11 @@ void VulkanRenderer::cleanup() {
     vkDestroyImage(device, normalTextureImage, nullptr);
     vkFreeMemory(device, normalTextureImageMemory, nullptr);
     
+    vkDestroySampler(device, albedoTextureSampler, nullptr);
+    vkDestroyImageView(device, albedoTextureImageView, nullptr);
+    vkDestroyImage(device, albedoTextureImage, nullptr);
+    vkFreeMemory(device, albedoTextureImageMemory, nullptr);
+    
     vkDestroyBuffer(device, stagingBuffer, nullptr);
     vkFreeMemory(device, stagingBufferMemory, nullptr);
 
@@ -161,6 +171,9 @@ void VulkanRenderer::cleanup() {
 
     vkDestroyBuffer(device, normalStagingBuffer, nullptr);
     vkFreeMemory(device, normalStagingBufferMemory, nullptr);
+
+    vkDestroyBuffer(device, albedoStagingBuffer, nullptr);
+    vkFreeMemory(device, albedoStagingBufferMemory, nullptr);
 
     vkDestroyPipeline(device, depthDSPipeline, nullptr);
     vkDestroyPipelineLayout(device, depthDSPipelineLayout, nullptr);
@@ -630,7 +643,13 @@ void VulkanRenderer::createDescriptorSetLayout() {
     dsNormalBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     dsNormalBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
-    std::vector<VkDescriptorSetLayoutBinding> dsBindings = {dsDepthBinding, dsAlbedoBinding, dsNormalBinding};
+    VkDescriptorSetLayoutBinding dsNewAlbedoBinding{};
+    dsNewAlbedoBinding.binding = 3;
+    dsNewAlbedoBinding.descriptorCount = 1;
+    dsNewAlbedoBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    dsNewAlbedoBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+    std::vector<VkDescriptorSetLayoutBinding> dsBindings = {dsDepthBinding, dsAlbedoBinding, dsNormalBinding, dsNewAlbedoBinding};
     VkDescriptorSetLayoutCreateInfo dsLayoutInfo{};
     dsLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
     dsLayoutInfo.bindingCount = static_cast<uint32_t>(dsBindings.size());
@@ -1122,10 +1141,14 @@ void VulkanRenderer::createDescriptorSets() {
 
         VkDescriptorImageInfo normalInfo{};
         normalInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        normalInfo.imageView = normalTextureImageView;
         normalInfo.sampler = normalTextureSampler;
 
-        std::vector<VkWriteDescriptorSet> writes(3);
+        VkDescriptorImageInfo newAlbedoInfo{};
+        newAlbedoInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        newAlbedoInfo.imageView = albedoTextureImageView;
+        newAlbedoInfo.sampler = albedoTextureSampler;
+
+        std::vector<VkWriteDescriptorSet> writes(4);
         writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         writes[0].dstSet = depthDSDescriptorSets[i];
         writes[0].dstBinding = 0;
@@ -1146,6 +1169,13 @@ void VulkanRenderer::createDescriptorSets() {
         writes[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         writes[2].descriptorCount = 1;
         writes[2].pImageInfo = &normalInfo;
+
+        writes[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        writes[3].dstSet = depthDSDescriptorSets[i];
+        writes[3].dstBinding = 3;
+        writes[3].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        writes[3].descriptorCount = 1;
+        writes[3].pImageInfo = &newAlbedoInfo;
 
         vkUpdateDescriptorSets(device, static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
     }
@@ -1185,7 +1215,7 @@ void VulkanRenderer::createDescriptorSets() {
         // Initial binding (will be updated dynamically if needed)
         VkDescriptorImageInfo snrInfo{};
         snrInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        snrInfo.imageView = depthDSImageView; // DEBUG: Show depthDS output
+        snrInfo.imageView = offscreenImageView; // DEBUG: Show RM (Offscreen) output
         snrInfo.sampler = offscreenSampler;
 
         VkDescriptorImageInfo colorInfo{};
@@ -1294,6 +1324,10 @@ void VulkanRenderer::drawFrame() {
     transitionImageLayout(normalTextureImage, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
     copyBufferToImage(normalStagingBuffer, normalTextureImage, WIDTH, HEIGHT);
     transitionImageLayout(normalTextureImage, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+    transitionImageLayout(albedoTextureImage, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    copyBufferToImage(albedoStagingBuffer, albedoTextureImage, WIDTH, HEIGHT);
+    transitionImageLayout(albedoTextureImage, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
     transitionImageLayout(mvTextureImage, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
     copyBufferToImage(mvStagingBuffer, mvTextureImage, WIDTH, HEIGHT);
@@ -1540,6 +1574,9 @@ void VulkanRenderer::updateTexture() {
     oss << COLOR_PATH_PREFIX << std::setw(4) << std::setfill('0') << currentFrameIndex << FILE_EXTENSION;
     doss << DEPTH_PATH_PREFIX << std::setw(4) << std::setfill('0') << currentFrameIndex << FILE_EXTENSION;
     noss << NORMAL_PATH_PREFIX << std::setw(4) << std::setfill('0') << currentFrameIndex << FILE_EXTENSION;
+    
+    std::ostringstream aoss;
+    aoss << ALBEDO_PATH_PREFIX << std::setw(4) << std::setfill('0') << currentFrameIndex << FILE_EXTENSION;
 
     void* data;
     vkMapMemory(device, stagingBufferMemory, 0, WIDTH * HEIGHT * 4, 0, &data);
@@ -1555,6 +1592,11 @@ void VulkanRenderer::updateTexture() {
     vkMapMemory(device, normalStagingBufferMemory, 0, WIDTH * HEIGHT * 4, 0, &ndata);
     loadRawImage(noss.str(), ndata, NORMAL_PATH_PREFIX);
     vkUnmapMemory(device, normalStagingBufferMemory);
+
+    void* adata;
+    vkMapMemory(device, albedoStagingBufferMemory, 0, WIDTH * HEIGHT * 4, 0, &adata);
+    loadRawImage(aoss.str(), adata, ALBEDO_PATH_PREFIX);
+    vkUnmapMemory(device, albedoStagingBufferMemory);
     
     std::ostringstream mvoss;
     mvoss << MV_PATH_PREFIX << std::setw(4) << std::setfill('0') << currentFrameIndex << FILE_EXTENSION;
@@ -2041,6 +2083,38 @@ void VulkanRenderer::createMVTextureSampler() {
 
     if (vkCreateSampler(device, &samplerInfo, nullptr, &mvTextureSampler) != VK_SUCCESS) {
         throw std::runtime_error("failed to create MV texture sampler!");
+    }
+}
+
+void VulkanRenderer::createAlbedoTextureImage() {
+    VkDeviceSize imageSize = WIDTH * HEIGHT * 4;
+    createBuffer(imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, albedoStagingBuffer, albedoStagingBufferMemory);
+    createImage(WIDTH, HEIGHT, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, albedoTextureImage, albedoTextureImageMemory);
+    transitionImageLayout(albedoTextureImage, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    transitionImageLayout(albedoTextureImage, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+}
+
+void VulkanRenderer::createAlbedoTextureImageView() {
+    albedoTextureImageView = createImageView(albedoTextureImage, VK_FORMAT_R8G8B8A8_UNORM);
+}
+
+void VulkanRenderer::createAlbedoTextureSampler() {
+    VkSamplerCreateInfo samplerInfo{};
+    samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    samplerInfo.magFilter = VK_FILTER_LINEAR;
+    samplerInfo.minFilter = VK_FILTER_LINEAR;
+    samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerInfo.anisotropyEnable = VK_FALSE;
+    samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+    samplerInfo.unnormalizedCoordinates = VK_FALSE;
+    samplerInfo.compareEnable = VK_FALSE;
+    samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
+    samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+
+    if (vkCreateSampler(device, &samplerInfo, nullptr, &albedoTextureSampler) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create Albedo texture sampler!");
     }
 }
 
