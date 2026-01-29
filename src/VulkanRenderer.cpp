@@ -202,6 +202,10 @@ void VulkanRenderer::cleanup() {
     vkDestroyImage(device, tnrIntermediateColorImage, nullptr);
     vkFreeMemory(device, tnrIntermediateColorImageMemory, nullptr);
 
+    vkDestroyImageView(device, tnrOut2ImageView, nullptr);
+    vkDestroyImage(device, tnrOut2Image, nullptr);
+    vkFreeMemory(device, tnrOut2ImageMemory, nullptr);
+
     for (int i = 0; i < 2; i++) {
         vkDestroyFramebuffer(device, tnrFramebuffers[i], nullptr);
         vkDestroyImageView(device, tnrInfoImageViews[i], nullptr);
@@ -1469,8 +1473,8 @@ void VulkanRenderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
     tnrRenderPassInfo.renderArea.offset = {0, 0};
     tnrRenderPassInfo.renderArea.extent = {RM_WIDTH, RM_HEIGHT};
 
-    VkClearValue tnrClearValues[2] = {{{0.0f, 0.0f, 0.0f, 1.0f}}, {{0.0f, 0.0f, 0.0f, 1.0f}}};
-    tnrRenderPassInfo.clearValueCount = 2;
+    VkClearValue tnrClearValues[3] = {{{0.0f, 0.0f, 0.0f, 1.0f}}, {{0.0f, 0.0f, 0.0f, 1.0f}}, {{0.0f, 0.0f, 0.0f, 1.0f}}};
+    tnrRenderPassInfo.clearValueCount = 3;
     tnrRenderPassInfo.pClearValues = tnrClearValues;
 
     vkCmdBeginRenderPass(commandBuffer, &tnrRenderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
@@ -1536,10 +1540,10 @@ void VulkanRenderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
     finalScissor.extent = swapchainExtent;
     vkCmdSetScissor(commandBuffer, 0, 1, &finalScissor);
 
-    // Update final descriptor set to read from the SNR result
+    // Update final descriptor set to read from the TNR output (TNR_out0)
     VkDescriptorImageInfo resultInfo{};
     resultInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    resultInfo.imageView = snrImageViews[1 - tnrHistoryIndex];
+    resultInfo.imageView = tnrIntermediateColorImageView; // TNR_out0
     resultInfo.sampler = offscreenSampler;
 
     VkWriteDescriptorSet resultWrite{};
@@ -1550,8 +1554,8 @@ void VulkanRenderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
     resultWrite.descriptorCount = 1;
     resultWrite.pImageInfo = &resultInfo;
 
-    // DEBUG: Disable updating final descriptor set to keep showing depthDS
-    // vkUpdateDescriptorSets(device, 1, &resultWrite, 0, nullptr);
+    // Update to show TNR Output
+    vkUpdateDescriptorSets(device, 1, &resultWrite, 0, nullptr);
 
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, finalPipelineLayout, 0, 1, &finalDescriptorSets[currentFrame], 0, nullptr);
     vkCmdDraw(commandBuffer, 6, 1, 0, 0);
@@ -2124,6 +2128,11 @@ void VulkanRenderer::createTNRResources() {
     tnrIntermediateColorImageView = createImageView(tnrIntermediateColorImage, VK_FORMAT_R16G16B16A16_SFLOAT);
     transitionImageLayout(tnrIntermediateColorImage, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
+    // Out2 Image
+    createImage(RM_WIDTH, RM_HEIGHT, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, tnrOut2Image, tnrOut2ImageMemory);
+    tnrOut2ImageView = createImageView(tnrOut2Image, VK_FORMAT_R16G16B16A16_SFLOAT);
+    transitionImageLayout(tnrOut2Image, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
     // 1. Render Pass
     VkAttachmentDescription colorAttachment{};
     colorAttachment.format = VK_FORMAT_R16G16B16A16_SFLOAT;
@@ -2145,19 +2154,30 @@ void VulkanRenderer::createTNRResources() {
     infoAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     infoAttachment.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
+    VkAttachmentDescription out2Attachment{};
+    out2Attachment.format = VK_FORMAT_R16G16B16A16_SFLOAT;
+    out2Attachment.samples = VK_SAMPLE_COUNT_1_BIT;
+    out2Attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    out2Attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    out2Attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    out2Attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    out2Attachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    out2Attachment.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
     VkAttachmentReference colorReference = {0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
     VkAttachmentReference infoReference = {1, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
-    VkAttachmentReference attachmentsRef[] = {colorReference, infoReference};
+    VkAttachmentReference out2Reference = {2, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+    VkAttachmentReference attachmentsRef[] = {colorReference, infoReference, out2Reference};
 
     VkSubpassDescription subpass{};
     subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    subpass.colorAttachmentCount = 2;
+    subpass.colorAttachmentCount = 3;
     subpass.pColorAttachments = attachmentsRef;
 
-    VkAttachmentDescription attachments[] = {colorAttachment, infoAttachment};
+    VkAttachmentDescription attachments[] = {colorAttachment, infoAttachment, out2Attachment};
     VkRenderPassCreateInfo renderPassInfo{};
     renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    renderPassInfo.attachmentCount = 2;
+    renderPassInfo.attachmentCount = 3;
     renderPassInfo.pAttachments = attachments;
     renderPassInfo.subpassCount = 1;
     renderPassInfo.pSubpasses = &subpass;
@@ -2172,11 +2192,11 @@ void VulkanRenderer::createTNRResources() {
         tnrInfoImageViews[i] = createImageView(tnrInfoImages[i], VK_FORMAT_R16G16B16A16_SFLOAT);
         transitionImageLayout(tnrInfoImages[i], VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
-        VkImageView attachmentsFB[] = {tnrIntermediateColorImageView, tnrInfoImageViews[i]};
+        VkImageView attachmentsFB[] = {tnrIntermediateColorImageView, tnrInfoImageViews[i], tnrOut2ImageView};
         VkFramebufferCreateInfo framebufferInfo{};
         framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
         framebufferInfo.renderPass = tnrRenderPass;
-        framebufferInfo.attachmentCount = 2;
+        framebufferInfo.attachmentCount = 3;
         framebufferInfo.pAttachments = attachmentsFB;
         framebufferInfo.width = RM_WIDTH;
         framebufferInfo.height = RM_HEIGHT;
@@ -2241,12 +2261,13 @@ void VulkanRenderer::createTNRResources() {
     multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
     multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
 
-    VkPipelineColorBlendAttachmentState blendAttachments[2]{};
+    VkPipelineColorBlendAttachmentState blendAttachments[3]{};
     blendAttachments[0].colorWriteMask = 0xF;
     blendAttachments[1].colorWriteMask = 0xF;
+    blendAttachments[2].colorWriteMask = 0xF;
     VkPipelineColorBlendStateCreateInfo colorBlending{};
     colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-    colorBlending.attachmentCount = 2;
+    colorBlending.attachmentCount = 3;
     colorBlending.pAttachments = blendAttachments;
 
     VkDynamicState dynamicStates[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};

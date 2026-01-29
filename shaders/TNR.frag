@@ -11,6 +11,7 @@ layout(location = 0) in vec2 fragTexCoord;
 
 layout(location = 0) out vec4 TNR_out0;
 layout(location = 1) out vec4 TNR_out1;
+layout(location = 2) out vec4 TNR_out2;
 
 void main() {
     vec2 uv = fragTexCoord;
@@ -83,4 +84,5 @@ void main() {
     
     TNR_out0 = vec4(result, 1.0);
     TNR_out1 = vec4(historyLength, tm2, depth, 1.0);
+    TNR_out2 = vec4(0.0);
 }

@@ -154,6 +154,10 @@ private:
     VkDeviceMemory tnrIntermediateColorImageMemory;
     VkImageView tnrIntermediateColorImageView;
 
+    VkImage tnrOut2Image;
+    VkDeviceMemory tnrOut2ImageMemory;
+    VkImageView tnrOut2ImageView;
+
     VkImage snrImages[2];
     VkDeviceMemory snrImageMemories[2];
     VkImageView snrImageViews[2];
