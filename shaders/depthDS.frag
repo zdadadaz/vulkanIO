@@ -15,7 +15,7 @@ const float farplan = 1000.0;
 void main() {
     // 1. Read and recompose packed 24-bit depth
     vec4 packedDepth = texture(depthSampler, fragTexCoord);
-    float z = (packedDepth.r * 255.0 + packedDepth.g * 255.0 * 256.0 + packedDepth.b * 255.0 * 65536.0) / 16777215.0;
+    float z = float(uint(packedDepth.r) + (uint(packedDepth.g * 256.0 +0.5) <<8u)  + (uint(packedDepth.b * 255.0 +0.5) <<16u)) / 16777215.0;
     
     // 2. Linearize depth
     float linearDepth = (nearplan * farplan) / (farplan - z * (farplan - nearplan));
