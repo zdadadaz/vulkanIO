@@ -506,7 +506,7 @@ void VulkanRenderer::createRenderPass() {
     // === Offscreen Render Pass (For Ray Marching) ===
     // This renders to an intermediate texture, not the screen.
     VkAttachmentDescription offscreenAttachment{};
-    offscreenAttachment.format = VK_FORMAT_R8G8B8A8_UNORM;
+    offscreenAttachment.format = VK_FORMAT_R16G16B16A16_SFLOAT;
     offscreenAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
     offscreenAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     offscreenAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -548,7 +548,7 @@ void VulkanRenderer::createRenderPass() {
 
     // === DepthDS Render Pass (Depth Downsampling) ===
     VkAttachmentDescription dsAttachment{};
-    dsAttachment.format = VK_FORMAT_R8G8B8A8_UNORM;
+    dsAttachment.format = VK_FORMAT_R16G16B16A16_SFLOAT;
     dsAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
     dsAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     dsAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -979,9 +979,9 @@ void VulkanRenderer::createDepthTextureSampler() {
 }
 
 void VulkanRenderer::createOffscreenResources() {
-    createImage(RM_WIDTH, RM_HEIGHT, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, offscreenImage, offscreenImageMemory);
-    offscreenImageView = createImageView(offscreenImage, VK_FORMAT_R8G8B8A8_UNORM);
-    transitionImageLayout(offscreenImage, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    createImage(RM_WIDTH, RM_HEIGHT, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, offscreenImage, offscreenImageMemory);
+    offscreenImageView = createImageView(offscreenImage, VK_FORMAT_R16G16B16A16_SFLOAT);
+    transitionImageLayout(offscreenImage, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
     VkSamplerCreateInfo samplerInfo{};
     samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
@@ -2035,9 +2035,9 @@ void VulkanRenderer::createNormalTextureSampler() {
 }
 
 void VulkanRenderer::createDepthDSResources() {
-    createImage(RM_WIDTH, RM_HEIGHT, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depthDSImage, depthDSImageMemory);
-    depthDSImageView = createImageView(depthDSImage, VK_FORMAT_R8G8B8A8_UNORM);
-    transitionImageLayout(depthDSImage, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    createImage(RM_WIDTH, RM_HEIGHT, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depthDSImage, depthDSImageMemory);
+    depthDSImageView = createImageView(depthDSImage, VK_FORMAT_R16G16B16A16_SFLOAT);
+    transitionImageLayout(depthDSImage, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
     // Framebuffer
     VkFramebufferCreateInfo framebufferInfo{};
@@ -2120,13 +2120,13 @@ void VulkanRenderer::createAlbedoTextureSampler() {
 
 void VulkanRenderer::createTNRResources() {
     // Intermediate output image
-    createImage(RM_WIDTH, RM_HEIGHT, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, tnrIntermediateColorImage, tnrIntermediateColorImageMemory);
-    tnrIntermediateColorImageView = createImageView(tnrIntermediateColorImage, VK_FORMAT_R8G8B8A8_UNORM);
-    transitionImageLayout(tnrIntermediateColorImage, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    createImage(RM_WIDTH, RM_HEIGHT, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, tnrIntermediateColorImage, tnrIntermediateColorImageMemory);
+    tnrIntermediateColorImageView = createImageView(tnrIntermediateColorImage, VK_FORMAT_R16G16B16A16_SFLOAT);
+    transitionImageLayout(tnrIntermediateColorImage, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
     // 1. Render Pass
     VkAttachmentDescription colorAttachment{};
-    colorAttachment.format = VK_FORMAT_R8G8B8A8_UNORM;
+    colorAttachment.format = VK_FORMAT_R16G16B16A16_SFLOAT;
     colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
     colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -2136,7 +2136,7 @@ void VulkanRenderer::createTNRResources() {
     colorAttachment.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
     VkAttachmentDescription infoAttachment{};
-    infoAttachment.format = VK_FORMAT_R32G32B32A32_SFLOAT;
+    infoAttachment.format = VK_FORMAT_R16G16B16A16_SFLOAT;
     infoAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
     infoAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     infoAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -2168,9 +2168,9 @@ void VulkanRenderer::createTNRResources() {
 
     // 2. Info Images (Double buffered for flip)
     for (int i = 0; i < 2; i++) {
-        createImage(RM_WIDTH, RM_HEIGHT, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, tnrInfoImages[i], tnrInfoImageMemories[i]);
-        tnrInfoImageViews[i] = createImageView(tnrInfoImages[i], VK_FORMAT_R32G32B32A32_SFLOAT);
-        transitionImageLayout(tnrInfoImages[i], VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        createImage(RM_WIDTH, RM_HEIGHT, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, tnrInfoImages[i], tnrInfoImageMemories[i]);
+        tnrInfoImageViews[i] = createImageView(tnrInfoImages[i], VK_FORMAT_R16G16B16A16_SFLOAT);
+        transitionImageLayout(tnrInfoImages[i], VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
         VkImageView attachmentsFB[] = {tnrIntermediateColorImageView, tnrInfoImageViews[i]};
         VkFramebufferCreateInfo framebufferInfo{};
@@ -2290,7 +2290,7 @@ void VulkanRenderer::createTNRResources() {
 void VulkanRenderer::createSNRResources() {
     // 1. Render Pass
     VkAttachmentDescription colorAttachment{};
-    colorAttachment.format = VK_FORMAT_R8G8B8A8_UNORM;
+    colorAttachment.format = VK_FORMAT_R16G16B16A16_SFLOAT;
     colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
     colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -2319,9 +2319,9 @@ void VulkanRenderer::createSNRResources() {
 
     // 2. Images (Double buffered for flip)
     for (int i = 0; i < 2; i++) {
-        createImage(RM_WIDTH, RM_HEIGHT, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, snrImages[i], snrImageMemories[i]);
-        snrImageViews[i] = createImageView(snrImages[i], VK_FORMAT_R8G8B8A8_UNORM);
-        transitionImageLayout(snrImages[i], VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        createImage(RM_WIDTH, RM_HEIGHT, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, snrImages[i], snrImageMemories[i]);
+        snrImageViews[i] = createImageView(snrImages[i], VK_FORMAT_R16G16B16A16_SFLOAT);
+        transitionImageLayout(snrImages[i], VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
         VkFramebufferCreateInfo framebufferInfo{};
         framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
