@@ -1651,16 +1651,28 @@ void VulkanRenderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
     resultInfo.imageView = tnr2ImageViews[1 - tnrHistoryIndex]; // TNR2_out0
     resultInfo.sampler = offscreenSampler;
 
-    VkWriteDescriptorSet resultWrite{};
-    resultWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    resultWrite.dstSet = finalDescriptorSets[currentFrame];
-    resultWrite.dstBinding = 0;
-    resultWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    resultWrite.descriptorCount = 1;
-    resultWrite.pImageInfo = &resultInfo;
+    VkDescriptorImageInfo colorInfo{};
+    colorInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    colorInfo.imageView = textureImageView; // Original Color
+    colorInfo.sampler = textureSampler;
 
-    // Update to show TNR2 Output
-    vkUpdateDescriptorSets(device, 1, &resultWrite, 0, nullptr);
+    VkWriteDescriptorSet finalWrites[2]{};
+    finalWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    finalWrites[0].dstSet = finalDescriptorSets[currentFrame];
+    finalWrites[0].dstBinding = 0;
+    finalWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    finalWrites[0].descriptorCount = 1;
+    finalWrites[0].pImageInfo = &resultInfo;
+
+    finalWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    finalWrites[1].dstSet = finalDescriptorSets[currentFrame];
+    finalWrites[1].dstBinding = 1;
+    finalWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    finalWrites[1].descriptorCount = 1;
+    finalWrites[1].pImageInfo = &colorInfo;
+
+    // Update to show TNR2 Output + Color
+    vkUpdateDescriptorSets(device, 2, finalWrites, 0, nullptr);
 
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, finalPipelineLayout, 0, 1, &finalDescriptorSets[currentFrame], 0, nullptr);
     vkCmdDraw(commandBuffer, 6, 1, 0, 0);
