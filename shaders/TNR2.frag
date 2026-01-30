@@ -126,4 +126,6 @@ void main() {
     
     TNR2_out0 = vec4(result, 1.0);
     TNR2_out1 = vec4(historyLen, 0.0, depth, 0.0);
+
+    //TNR2_out0 = history;
 }

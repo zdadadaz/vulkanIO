@@ -3205,16 +3205,28 @@ void VulkanRenderer::createTNR2DescriptorSets() {
     for (size_t i = 0; i < setCount; i++) {
         uint32_t historyIdx = i % 2; // Matches tnrHistoryIndex
 
-        // TNR2 reads:
-        // SNR2 (Current Input): writes to [1-historyIdx] in previous pass, so read from [1-historyIdx].
-        // TNR2 History: read from [historyIdx].
-        // TNR Info: read from [1-historyIdx] (Assuming it was written in TNR pass using "1-historyIdx").
+        // TNR2 Logic (Ping-Pong 0/1):
+        // Current Frame writes to: [1 - historyIdx].
+        // Previous Frame wrote to: [historyIdx].
         
+        // 1. Prior stage Output (SNR2) is available in [1 - historyIdx].
         VkDescriptorImageInfo snrInfo{offscreenSampler, snr2ImageViews[1 - historyIdx], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+        
+        // 2. TNR2 History: "sTNR2_History should be the TNR2's previous(t-1) TNR2_out0"
+        // This corresponds to [historyIdx].
         VkDescriptorImageInfo historyInfo{offscreenSampler, tnr2ImageViews[historyIdx], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+        
+        // 3. Depth
         VkDescriptorImageInfo depthInfo{depthTextureSampler, depthTextureImageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+        
+        // 4. Motion Vectors
         VkDescriptorImageInfo mvInfo{mvTextureSampler, mvTextureImageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+        
+        // 5. Fresnel
         VkDescriptorImageInfo fresnelInfo{offscreenSampler, fresnelImageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+        
+        // 6. TNR Info: "sTNR_Info should be the TNR's current(t) TNR_out1"
+        // TNR (Pass 2) writes to [1 - historyIdx]. So we read from [1 - historyIdx].
         VkDescriptorImageInfo tnrInfoInfo{offscreenSampler, tnrInfoImageViews[1 - historyIdx], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
 
         VkWriteDescriptorSet writes[6]{};
