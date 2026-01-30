@@ -10,7 +10,7 @@ layout(binding = 5) uniform sampler2D sTNR_Info;
 layout(location = 0) in vec2 fragTexCoord;
 
 layout(location = 0) out vec4 TNR2_out0;
-layout(location = 1) out vec4 TNR2_out1; // History Info (Variance/Length)
+
 
 // Constants
 const float UI_MaxFrames = 32.0;
@@ -64,7 +64,6 @@ void main() {
     // Bounds check
     if (pastUV.x < 0.0 || pastUV.x > 1.0 || pastUV.y < 0.0 || pastUV.y > 1.0) {
         TNR2_out0 = current;
-        TNR2_out1 = vec4(1.0, 0.0, depth, 0.0);
         return;
     }
     
@@ -125,7 +124,7 @@ void main() {
     vec3 result = mix(clampedHistory, current.rgb, alpha);
     
     TNR2_out0 = vec4(result, 1.0);
-    TNR2_out1 = vec4(historyLen, 0.0, depth, 0.0);
+    TNR2_out0 = vec4(result, 1.0);
 
     //TNR2_out0 = history;
 }

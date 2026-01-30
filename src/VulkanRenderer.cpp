@@ -1605,8 +1605,8 @@ void VulkanRenderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
     tnr2RenderPassInfo.framebuffer = tnr2Framebuffers[1 - tnrHistoryIndex];
     tnr2RenderPassInfo.renderArea.offset = {0, 0};
     tnr2RenderPassInfo.renderArea.extent = {WIDTH, HEIGHT};
-    tnr2RenderPassInfo.clearValueCount = 2; // Color, Info
-    VkClearValue tnr2ClearValues[2] = {clearColor, clearColor};
+    tnr2RenderPassInfo.clearValueCount = 1; // Color
+    VkClearValue tnr2ClearValues[1] = {clearColor};
     tnr2RenderPassInfo.pClearValues = tnr2ClearValues;
 
     vkCmdBeginRenderPass(commandBuffer, &tnr2RenderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
@@ -2380,8 +2380,11 @@ void VulkanRenderer::createTNRResources() {
 
     VkPipelineColorBlendAttachmentState blendAttachments[3]{};
     blendAttachments[0].colorWriteMask = 0xF;
+    blendAttachments[0].blendEnable = VK_FALSE;
     blendAttachments[1].colorWriteMask = 0xF;
+    blendAttachments[1].blendEnable = VK_FALSE;
     blendAttachments[2].colorWriteMask = 0xF;
+    blendAttachments[2].blendEnable = VK_FALSE;
     VkPipelineColorBlendStateCreateInfo colorBlending{};
     colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
     colorBlending.attachmentCount = 3;
@@ -2531,6 +2534,7 @@ void VulkanRenderer::createSNRResources() {
 
     VkPipelineColorBlendAttachmentState blendAttachment{};
     blendAttachment.colorWriteMask = 0xF;
+    blendAttachment.blendEnable = VK_FALSE;
     VkPipelineColorBlendStateCreateInfo colorBlending{};
     colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
     colorBlending.attachmentCount = 1;
@@ -3041,29 +3045,18 @@ void VulkanRenderer::createTNR2Resources() {
     colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     colorAttachment.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
-    VkAttachmentDescription infoAttachment{};
-    infoAttachment.format = VK_FORMAT_R16G16B16A16_SFLOAT;
-    infoAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-    infoAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    infoAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    infoAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    infoAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    infoAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    infoAttachment.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
     VkAttachmentReference colorReference = {0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
-    VkAttachmentReference infoReference = {1, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
-    VkAttachmentReference attachmentsRef[] = {colorReference, infoReference};
+    VkAttachmentReference attachmentsRef[] = {colorReference};
 
     VkSubpassDescription subpass{};
     subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    subpass.colorAttachmentCount = 2;
+    subpass.colorAttachmentCount = 1;
     subpass.pColorAttachments = attachmentsRef;
 
-    VkAttachmentDescription attachments[] = {colorAttachment, infoAttachment};
+    VkAttachmentDescription attachments[] = {colorAttachment};
     VkRenderPassCreateInfo renderPassInfo{};
     renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    renderPassInfo.attachmentCount = 2;
+    renderPassInfo.attachmentCount = 1;
     renderPassInfo.pAttachments = attachments;
     renderPassInfo.subpassCount = 1;
     renderPassInfo.pSubpasses = &subpass;
@@ -3079,16 +3072,11 @@ void VulkanRenderer::createTNR2Resources() {
         tnr2ImageViews[i] = createImageView(tnr2Images[i], VK_FORMAT_R16G16B16A16_SFLOAT);
         transitionImageLayout(tnr2Images[i], VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
-        // Info
-        createImage(WIDTH, HEIGHT, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, tnr2InfoImages[i], tnr2InfoImageMemories[i]);
-        tnr2InfoImageViews[i] = createImageView(tnr2InfoImages[i], VK_FORMAT_R16G16B16A16_SFLOAT);
-        transitionImageLayout(tnr2InfoImages[i], VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-
-        VkImageView attachmentsFB[] = {tnr2ImageViews[i], tnr2InfoImageViews[i]};
+        VkImageView attachmentsFB[] = {tnr2ImageViews[i]};
         VkFramebufferCreateInfo framebufferInfo{};
         framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
         framebufferInfo.renderPass = tnr2RenderPass;
-        framebufferInfo.attachmentCount = 2;
+        framebufferInfo.attachmentCount = 1;
         framebufferInfo.pAttachments = attachmentsFB;
         framebufferInfo.width = WIDTH;
         framebufferInfo.height = HEIGHT;
@@ -3153,12 +3141,12 @@ void VulkanRenderer::createTNR2Resources() {
     multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
     multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
 
-    VkPipelineColorBlendAttachmentState blendAttachments[2]{};
+    VkPipelineColorBlendAttachmentState blendAttachments[1]{};
     blendAttachments[0].colorWriteMask = 0xF;
-    blendAttachments[1].colorWriteMask = 0xF;
+    blendAttachments[0].blendEnable = VK_FALSE;
     VkPipelineColorBlendStateCreateInfo colorBlending{};
     colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-    colorBlending.attachmentCount = 2;
+    colorBlending.attachmentCount = 1;
     colorBlending.pAttachments = blendAttachments;
 
     VkDynamicState dynamicStates[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
