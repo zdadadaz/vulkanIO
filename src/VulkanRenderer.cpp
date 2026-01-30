@@ -1586,34 +1586,6 @@ void VulkanRenderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
     vkCmdEndRenderPass(commandBuffer);
 
     // --- Pass 3.7: TNR2 ---
-    VkDescriptorImageInfo snrInfoTNR2{offscreenSampler, snr2ImageViews[1 - tnrHistoryIndex], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
-    VkDescriptorImageInfo historyInfoTNR2{offscreenSampler, tnr2ImageViews[tnrHistoryIndex], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
-    VkDescriptorImageInfo tnrInfoInfoTNR2Current{offscreenSampler, tnrInfoImageViews[1-tnrHistoryIndex], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
-
-    VkWriteDescriptorSet tnr2Writes[3]{};
-    tnr2Writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    tnr2Writes[0].dstSet = tnr2DescriptorSets[currentFrame];
-    tnr2Writes[0].dstBinding = 0;
-    tnr2Writes[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    tnr2Writes[0].descriptorCount = 1;
-    tnr2Writes[0].pImageInfo = &snrInfoTNR2;
-
-    tnr2Writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    tnr2Writes[1].dstSet = tnr2DescriptorSets[currentFrame];
-    tnr2Writes[1].dstBinding = 1;
-    tnr2Writes[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    tnr2Writes[1].descriptorCount = 1;
-    tnr2Writes[1].pImageInfo = &historyInfoTNR2;
-    
-    tnr2Writes[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    tnr2Writes[2].dstSet = tnr2DescriptorSets[currentFrame];
-    tnr2Writes[2].dstBinding = 5;
-    tnr2Writes[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    tnr2Writes[2].descriptorCount = 1;
-    tnr2Writes[2].pImageInfo = &tnrInfoInfoTNR2Current;
-
-    vkUpdateDescriptorSets(device, 3, tnr2Writes, 0, nullptr);
-
     VkRenderPassBeginInfo tnr2RenderPassInfo{};
     tnr2RenderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
     tnr2RenderPassInfo.renderPass = tnr2RenderPass;
@@ -1628,7 +1600,7 @@ void VulkanRenderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, tnr2Pipeline);
     vkCmdSetViewport(commandBuffer, 0, 1, &rmViewport);
     vkCmdSetScissor(commandBuffer, 0, 1, &rmScissor);
-    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, tnr2PipelineLayout, 0, 1, &tnr2DescriptorSets[currentFrame], 0, nullptr);
+    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, tnr2PipelineLayout, 0, 1, &tnr2DescriptorSets[currentFrame * 2 + tnrHistoryIndex], 0, nullptr);
     vkCmdDraw(commandBuffer, 6, 1, 0, 0);
     vkCmdEndRenderPass(commandBuffer);
 
@@ -3204,32 +3176,39 @@ void VulkanRenderer::createTNR2Resources() {
 
 
 void VulkanRenderer::createTNR2DescriptorSets() {
-    std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, tnr2DescriptorSetLayout);
+    uint32_t setCount = MAX_FRAMES_IN_FLIGHT * 2;
+    std::vector<VkDescriptorSetLayout> layouts(setCount, tnr2DescriptorSetLayout);
     VkDescriptorSetAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
     allocInfo.descriptorPool = descriptorPool;
-    allocInfo.descriptorSetCount = MAX_FRAMES_IN_FLIGHT;
+    allocInfo.descriptorSetCount = setCount;
     allocInfo.pSetLayouts = layouts.data();
 
-    tnr2DescriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
+    tnr2DescriptorSets.resize(setCount);
     if (vkAllocateDescriptorSets(device, &allocInfo, tnr2DescriptorSets.data()) != VK_SUCCESS) {
         throw std::runtime_error("failed to allocate TNR2 descriptor sets!");
     }
     
-    // Initial update - will be overwritten in draw/record loop for dynamic textures
-    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        VkDescriptorImageInfo snrInfo{offscreenSampler, snr2ImageViews[0], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
-        VkDescriptorImageInfo historyInfo{offscreenSampler, tnr2ImageViews[1], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+    for (size_t i = 0; i < setCount; i++) {
+        uint32_t historyIdx = i % 2; // Matches tnrHistoryIndex
+
+        // TNR2 reads:
+        // SNR2 (Current Input): writes to [1-historyIdx] in previous pass, so read from [1-historyIdx].
+        // TNR2 History: read from [historyIdx].
+        // TNR Info: read from [1-historyIdx] (Assuming it was written in TNR pass using "1-historyIdx").
+        
+        VkDescriptorImageInfo snrInfo{offscreenSampler, snr2ImageViews[1 - historyIdx], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+        VkDescriptorImageInfo historyInfo{offscreenSampler, tnr2ImageViews[historyIdx], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
         VkDescriptorImageInfo depthInfo{depthTextureSampler, depthTextureImageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
         VkDescriptorImageInfo mvInfo{mvTextureSampler, mvTextureImageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
         VkDescriptorImageInfo fresnelInfo{offscreenSampler, fresnelImageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
-        VkDescriptorImageInfo tnrInfoInfo{offscreenSampler, tnrInfoImageViews[0], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}; // Uses current tnr_info result
+        VkDescriptorImageInfo tnrInfoInfo{offscreenSampler, tnrInfoImageViews[1 - historyIdx], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
 
         VkWriteDescriptorSet writes[6]{};
         
         writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         writes[0].dstSet = tnr2DescriptorSets[i];
-        writes[0].dstBinding = 0; // SNR_out0
+        writes[0].dstBinding = 0; // SNR_out0 (actually SNR2 out)
         writes[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         writes[0].descriptorCount = 1;
         writes[0].pImageInfo = &snrInfo;
