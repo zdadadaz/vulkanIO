@@ -1586,7 +1586,7 @@ void VulkanRenderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
     vkCmdEndRenderPass(commandBuffer);
 
     // --- Pass 3.7: TNR2 ---
-    VkDescriptorImageInfo snrInfoTNR2{offscreenSampler, snrImageViews[1 - tnrHistoryIndex], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+    VkDescriptorImageInfo snrInfoTNR2{offscreenSampler, snr2ImageViews[1 - tnrHistoryIndex], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
     VkDescriptorImageInfo historyInfoTNR2{offscreenSampler, tnr2ImageViews[tnrHistoryIndex], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
     VkDescriptorImageInfo tnrInfoInfoTNR2Current{offscreenSampler, tnrInfoImageViews[1-tnrHistoryIndex], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
 
@@ -3218,7 +3218,7 @@ void VulkanRenderer::createTNR2DescriptorSets() {
     
     // Initial update - will be overwritten in draw/record loop for dynamic textures
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        VkDescriptorImageInfo snrInfo{offscreenSampler, snrImageViews[0], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}; // Placeholder
+        VkDescriptorImageInfo snrInfo{offscreenSampler, snr2ImageViews[0], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}; // Placeholder
         VkDescriptorImageInfo historyInfo{offscreenSampler, tnr2ImageViews[1], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}; // Placeholder
         VkDescriptorImageInfo depthInfo{depthTextureSampler, depthTextureImageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
         VkDescriptorImageInfo mvInfo{mvTextureSampler, mvTextureImageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
