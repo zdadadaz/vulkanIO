@@ -1573,14 +1573,27 @@ void VulkanRenderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
     fresnelPassInfo.renderPass = computeFresnelRenderPass;
     fresnelPassInfo.framebuffer = computeFresnelFramebuffer;
     fresnelPassInfo.renderArea.offset = {0, 0};
-    fresnelPassInfo.renderArea.extent = {RM_WIDTH, RM_HEIGHT};
+    fresnelPassInfo.renderArea.extent = {WIDTH, HEIGHT};
     fresnelPassInfo.clearValueCount = 1;
     fresnelPassInfo.pClearValues = &clearColor;
 
     vkCmdBeginRenderPass(commandBuffer, &fresnelPassInfo, VK_SUBPASS_CONTENTS_INLINE);
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, computeFresnelPipeline);
-    vkCmdSetViewport(commandBuffer, 0, 1, &rmViewport);
-    vkCmdSetScissor(commandBuffer, 0, 1, &rmScissor);
+    
+    VkViewport fullViewport{};
+    fullViewport.x = 0.0f;
+    fullViewport.y = 0.0f;
+    fullViewport.width = (float)WIDTH;
+    fullViewport.height = (float)HEIGHT;
+    fullViewport.minDepth = 0.0f;
+    fullViewport.maxDepth = 1.0f;
+    
+    VkRect2D fullScissor{};
+    fullScissor.offset = {0, 0};
+    fullScissor.extent = {WIDTH, HEIGHT};
+
+    vkCmdSetViewport(commandBuffer, 0, 1, &fullViewport);
+    vkCmdSetScissor(commandBuffer, 0, 1, &fullScissor);
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, computeFresnelPipelineLayout, 0, 1, &computeFresnelDescriptorSets[currentFrame], 0, nullptr);
     vkCmdDraw(commandBuffer, 6, 1, 0, 0);
     vkCmdEndRenderPass(commandBuffer);
@@ -1591,15 +1604,15 @@ void VulkanRenderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
     tnr2RenderPassInfo.renderPass = tnr2RenderPass;
     tnr2RenderPassInfo.framebuffer = tnr2Framebuffers[1 - tnrHistoryIndex];
     tnr2RenderPassInfo.renderArea.offset = {0, 0};
-    tnr2RenderPassInfo.renderArea.extent = {RM_WIDTH, RM_HEIGHT};
+    tnr2RenderPassInfo.renderArea.extent = {WIDTH, HEIGHT};
     tnr2RenderPassInfo.clearValueCount = 2; // Color, Info
     VkClearValue tnr2ClearValues[2] = {clearColor, clearColor};
     tnr2RenderPassInfo.pClearValues = tnr2ClearValues;
 
     vkCmdBeginRenderPass(commandBuffer, &tnr2RenderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, tnr2Pipeline);
-    vkCmdSetViewport(commandBuffer, 0, 1, &rmViewport);
-    vkCmdSetScissor(commandBuffer, 0, 1, &rmScissor);
+    vkCmdSetViewport(commandBuffer, 0, 1, &fullViewport);
+    vkCmdSetScissor(commandBuffer, 0, 1, &fullScissor);
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, tnr2PipelineLayout, 0, 1, &tnr2DescriptorSets[currentFrame * 2 + tnrHistoryIndex], 0, nullptr);
     vkCmdDraw(commandBuffer, 6, 1, 0, 0);
     vkCmdEndRenderPass(commandBuffer);
@@ -2848,7 +2861,7 @@ void VulkanRenderer::createComputeFresnelResources() {
     }
 
     // 2. Images
-    createImage(RM_WIDTH, RM_HEIGHT, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, fresnelImage, fresnelImageMemory);
+    createImage(WIDTH, HEIGHT, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, fresnelImage, fresnelImageMemory);
     fresnelImageView = createImageView(fresnelImage, VK_FORMAT_R16G16B16A16_SFLOAT);
     transitionImageLayout(fresnelImage, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
@@ -2857,8 +2870,8 @@ void VulkanRenderer::createComputeFresnelResources() {
     framebufferInfo.renderPass = computeFresnelRenderPass;
     framebufferInfo.attachmentCount = 1;
     framebufferInfo.pAttachments = &fresnelImageView;
-    framebufferInfo.width = RM_WIDTH;
-    framebufferInfo.height = RM_HEIGHT;
+    framebufferInfo.width = WIDTH;
+    framebufferInfo.height = HEIGHT;
     framebufferInfo.layers = 1;
 
     if (vkCreateFramebuffer(device, &framebufferInfo, nullptr, &computeFresnelFramebuffer) != VK_SUCCESS) {
@@ -3050,12 +3063,12 @@ void VulkanRenderer::createTNR2Resources() {
     // 2. Images
     for (int i = 0; i < 2; i++) {
         // Color
-        createImage(RM_WIDTH, RM_HEIGHT, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, tnr2Images[i], tnr2ImageMemories[i]);
+        createImage(WIDTH, HEIGHT, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, tnr2Images[i], tnr2ImageMemories[i]);
         tnr2ImageViews[i] = createImageView(tnr2Images[i], VK_FORMAT_R16G16B16A16_SFLOAT);
         transitionImageLayout(tnr2Images[i], VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
         // Info
-        createImage(RM_WIDTH, RM_HEIGHT, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, tnr2InfoImages[i], tnr2InfoImageMemories[i]);
+        createImage(WIDTH, HEIGHT, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, tnr2InfoImages[i], tnr2InfoImageMemories[i]);
         tnr2InfoImageViews[i] = createImageView(tnr2InfoImages[i], VK_FORMAT_R16G16B16A16_SFLOAT);
         transitionImageLayout(tnr2InfoImages[i], VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
@@ -3065,8 +3078,8 @@ void VulkanRenderer::createTNR2Resources() {
         framebufferInfo.renderPass = tnr2RenderPass;
         framebufferInfo.attachmentCount = 2;
         framebufferInfo.pAttachments = attachmentsFB;
-        framebufferInfo.width = RM_WIDTH;
-        framebufferInfo.height = RM_HEIGHT;
+        framebufferInfo.width = WIDTH;
+        framebufferInfo.height = HEIGHT;
         framebufferInfo.layers = 1;
 
         if (vkCreateFramebuffer(device, &framebufferInfo, nullptr, &tnr2Framebuffers[i]) != VK_SUCCESS) {
