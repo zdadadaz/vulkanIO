@@ -3218,12 +3218,12 @@ void VulkanRenderer::createTNR2DescriptorSets() {
     
     // Initial update - will be overwritten in draw/record loop for dynamic textures
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        VkDescriptorImageInfo snrInfo{offscreenSampler, snr2ImageViews[0], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}; // Placeholder
-        VkDescriptorImageInfo historyInfo{offscreenSampler, tnr2ImageViews[1], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}; // Placeholder
+        VkDescriptorImageInfo snrInfo{offscreenSampler, snr2ImageViews[0], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+        VkDescriptorImageInfo historyInfo{offscreenSampler, tnr2ImageViews[1], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
         VkDescriptorImageInfo depthInfo{depthTextureSampler, depthTextureImageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
         VkDescriptorImageInfo mvInfo{mvTextureSampler, mvTextureImageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
         VkDescriptorImageInfo fresnelInfo{offscreenSampler, fresnelImageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
-        VkDescriptorImageInfo tnrInfoInfo{offscreenSampler, tnrInfoImageViews[0], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}; // Using TNR1 info? User said "f. tnrInfoImageViews"
+        VkDescriptorImageInfo tnrInfoInfo{offscreenSampler, tnrInfoImageViews[0], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}; // Uses current tnr_info result
 
         VkWriteDescriptorSet writes[6]{};
         
