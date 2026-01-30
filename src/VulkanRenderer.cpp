@@ -1040,11 +1040,18 @@ void VulkanRenderer::createFinalDescriptorSetLayout() {
     colorLayoutBinding.pImmutableSamplers = nullptr;
     colorLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
-    VkDescriptorSetLayoutBinding bindings[] = {samplerLayoutBinding, colorLayoutBinding};
+    VkDescriptorSetLayoutBinding normalLayoutBinding{};
+    normalLayoutBinding.binding = 2;
+    normalLayoutBinding.descriptorCount = 1;
+    normalLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    normalLayoutBinding.pImmutableSamplers = nullptr;
+    normalLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+    VkDescriptorSetLayoutBinding bindings[] = {samplerLayoutBinding, colorLayoutBinding, normalLayoutBinding};
 
     VkDescriptorSetLayoutCreateInfo layoutInfo{};
     layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    layoutInfo.bindingCount = 2;
+    layoutInfo.bindingCount = 3;
     layoutInfo.pBindings = bindings;
 
     if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &finalDescriptorSetLayout) != VK_SUCCESS) {
@@ -1247,7 +1254,12 @@ void VulkanRenderer::createDescriptorSets() {
         colorInfo.imageView = textureImageView;
         colorInfo.sampler = textureSampler;
 
-        VkWriteDescriptorSet writes[2]{};
+        VkDescriptorImageInfo normalInfo{};
+        normalInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        normalInfo.imageView = normalTextureImageView;
+        normalInfo.sampler = normalTextureSampler;
+
+        VkWriteDescriptorSet writes[3]{};
         writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         writes[0].dstSet = finalDescriptorSets[i];
         writes[0].dstBinding = 0;
@@ -1262,7 +1274,14 @@ void VulkanRenderer::createDescriptorSets() {
         writes[1].descriptorCount = 1;
         writes[1].pImageInfo = &colorInfo;
 
-        vkUpdateDescriptorSets(device, 2, writes, 0, nullptr);
+        writes[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        writes[2].dstSet = finalDescriptorSets[i];
+        writes[2].dstBinding = 2;
+        writes[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        writes[2].descriptorCount = 1;
+        writes[2].pImageInfo = &normalInfo;
+
+        vkUpdateDescriptorSets(device, 3, writes, 0, nullptr);
     }
 }
 
