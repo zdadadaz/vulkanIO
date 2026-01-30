@@ -24,6 +24,8 @@ set(SHADERS
     ${SHADER_DIR}/TNR.frag
     ${SHADER_DIR}/SNR.frag
     ${SHADER_DIR}/SNR2.frag
+    ${SHADER_DIR}/TNR2.frag
+    ${SHADER_DIR}/computeFresnel.frag
 )
 
 foreach(SHADER ${SHADERS})

@@ -175,6 +175,36 @@ private:
     VkImageView snr2ImageViews[2];
     VkFramebuffer snr2Framebuffers[2];
 
+    // ComputeFresnel Pass
+    VkRenderPass computeFresnelRenderPass;
+    VkPipeline computeFresnelPipeline;
+    VkPipelineLayout computeFresnelPipelineLayout;
+    VkDescriptorSetLayout computeFresnelDescriptorSetLayout;
+    std::vector<VkDescriptorSet> computeFresnelDescriptorSets;
+
+    VkImage fresnelImage;
+    VkDeviceMemory fresnelImageMemory;
+    VkImageView fresnelImageView;
+    VkFramebuffer computeFresnelFramebuffer;
+
+    // TNR2 Pass
+    VkRenderPass tnr2RenderPass;
+    VkPipeline tnr2Pipeline;
+    VkPipelineLayout tnr2PipelineLayout;
+    VkDescriptorSetLayout tnr2DescriptorSetLayout;
+    std::vector<VkDescriptorSet> tnr2DescriptorSets;
+
+    VkImage tnr2Images[2]; // Ping-pong for output/history
+    VkDeviceMemory tnr2ImageMemories[2];
+    VkImageView tnr2ImageViews[2];
+    
+    VkImage tnr2InfoImages[2]; // Ping-pong for info history
+    VkDeviceMemory tnr2InfoImageMemories[2];
+    VkImageView tnr2InfoImageViews[2];
+    
+    VkFramebuffer tnr2Framebuffers[2];
+    uint32_t tnr2HistoryIndex = 0;
+
     // MV Texture Resources
     VkImage mvTextureImage;
     VkDeviceMemory mvTextureImageMemory;
@@ -240,6 +270,12 @@ private:
 
     void createSNR2Resources();
     void createSNR2DescriptorSets();
+
+    void createComputeFresnelResources();
+    void createComputeFresnelDescriptorSets();
+
+    void createTNR2Resources();
+    void createTNR2DescriptorSets();
 
     // Rendering
     void drawFrame();
