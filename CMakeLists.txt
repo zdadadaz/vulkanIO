@@ -4,7 +4,7 @@ project(VulkanImagePlayer)
 set(CMAKE_CXX_STANDARD 17)
 
 find_package(Vulkan REQUIRED)
-find_package(GLFW3 REQUIRED)
+find_package(glfw3 REQUIRED)
 
 include_directories(${Vulkan_INCLUDE_DIRS})
 
@@ -41,6 +41,7 @@ endforeach()
 
 add_executable(VulkanImagePlayer src/main.cpp src/VulkanRenderer.cpp ${SPV_SHADERS})
 target_link_libraries(VulkanImagePlayer glfw ${Vulkan_LIBRARIES})
+target_include_directories(VulkanImagePlayer PRIVATE ${glfw3_INCLUDE_DIRS})
 
 target_compile_definitions(VulkanImagePlayer PRIVATE 
     SHADER_DIR="${SPV_DIR}"
