@@ -63,7 +63,7 @@ void main() {
     
     // Bounds check
     if (pastUV.x < 0.0 || pastUV.x > 1.0 || pastUV.y < 0.0 || pastUV.y > 1.0) {
-        TNR2_out0 = current;
+        TNR2_out0 = vec4(current.rgb, fresnel);
         return;
     }
     
@@ -123,8 +123,8 @@ void main() {
     // For now, standard TAA blend:
     vec3 result = mix(clampedHistory, current.rgb, alpha);
     
-    TNR2_out0 = vec4(result, 1.0);
-    TNR2_out0 = vec4(result, 1.0);
+    TNR2_out0 = vec4(result, fresnel);
+    //TNR2_out0 = vec4(result, 1.0);
 
     //TNR2_out0 = history;
 }
