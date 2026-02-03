@@ -3263,6 +3263,7 @@ void VulkanRenderer::createSNR2Resources() {
   multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
   VkPipelineColorBlendAttachmentState blendAttachment{};
   blendAttachment.colorWriteMask = 0xF;
+  blendAttachment.blendEnable = VK_FALSE;
   VkPipelineColorBlendStateCreateInfo colorBlending{};
   colorBlending.sType =
       VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
@@ -3463,6 +3464,7 @@ void VulkanRenderer::createComputeFresnelResources() {
 
   VkPipelineColorBlendAttachmentState blendAttachment{};
   blendAttachment.colorWriteMask = 0xF;
+  blendAttachment.blendEnable = VK_FALSE;
   VkPipelineColorBlendStateCreateInfo colorBlending{};
   colorBlending.sType =
       VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
