@@ -20,15 +20,11 @@ const std::vector<const char *> deviceExtensions = {
     VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 
 // Paths to our input raw data sequences.
-const std::string COLOR_PATH_PREFIX =
-    "nvt_2026_01_23_11_43_31_45/color_input_0_";
-const std::string DEPTH_PATH_PREFIX =
-    "nvt_2026_01_23_11_43_31_45/depth_input_0_";
-const std::string NORMAL_PATH_PREFIX =
-    "nvt_2026_01_23_11_43_31_45/normal_input_0_";
-const std::string ALBEDO_PATH_PREFIX =
-    "nvt_2026_01_23_11_43_31_45/albedo_0_"; // New Path
-const std::string MV_PATH_PREFIX = "nvt_2026_01_23_11_43_31_45/mv_input_0_";
+const std::string COLOR_PATH_PREFIX  ="data/color_vulkan_";
+const std::string DEPTH_PATH_PREFIX  ="data/depth_vulkan_";
+const std::string NORMAL_PATH_PREFIX ="data/normal_vulkan_";
+const std::string ALBEDO_PATH_PREFIX ="data/albedo_vulkan_"; // New Path
+const std::string MV_PATH_PREFIX     ="data/mv_vulkan_";
 const std::string FILE_EXTENSION = ".raw";
 const uint32_t FILE_STRIDE = 4; // 4 bytes per pixel (RGBA)
 
@@ -721,17 +717,8 @@ void VulkanRenderer::createDescriptorSetLayout() {
   depthSamplerLayoutBinding.pImmutableSamplers = nullptr;
   depthSamplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
-  VkDescriptorSetLayoutBinding normalSamplerLayoutBinding{};
-  normalSamplerLayoutBinding.binding = 2;
-  normalSamplerLayoutBinding.descriptorCount = 1;
-  normalSamplerLayoutBinding.descriptorType =
-      VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-  normalSamplerLayoutBinding.pImmutableSamplers = nullptr;
-  normalSamplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
   std::vector<VkDescriptorSetLayoutBinding> bindings = {
-      samplerLayoutBinding, depthSamplerLayoutBinding,
-      normalSamplerLayoutBinding};
+      samplerLayoutBinding, depthSamplerLayoutBinding};
 
   VkDescriptorSetLayoutCreateInfo layoutInfo{};
   layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -1277,19 +1264,13 @@ void VulkanRenderer::createDescriptorSets() {
     imageInfo.imageView = textureImageView;
     imageInfo.sampler = textureSampler;
 
-    // Info about the Depth Texture to bind to Binding 1
+    // Info about the Depth Texture to bind to Binding 1 (using Downsampled Depth)
     VkDescriptorImageInfo depthImageInfo{};
     depthImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    depthImageInfo.imageView = depthTextureImageView;
+    depthImageInfo.imageView = depthDSImageView;
     depthImageInfo.sampler = depthTextureSampler;
 
-    // Info about the Normal Texture to bind to Binding 2
-    VkDescriptorImageInfo normalImageInfo{};
-    normalImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    normalImageInfo.imageView = normalTextureImageView;
-    normalImageInfo.sampler = normalTextureSampler;
-
-    std::vector<VkWriteDescriptorSet> descriptorWrites(3);
+    std::vector<VkWriteDescriptorSet> descriptorWrites(2);
 
     // Binding 0: Texture
     descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -1301,7 +1282,7 @@ void VulkanRenderer::createDescriptorSets() {
     descriptorWrites[0].descriptorCount = 1;
     descriptorWrites[0].pImageInfo = &imageInfo;
 
-    // Binding 1: Depth
+    // Binding 1: Depth (Downsampled Depth)
     descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     descriptorWrites[1].dstSet = descriptorSets[i];
     descriptorWrites[1].dstBinding = 1;
@@ -1310,16 +1291,6 @@ void VulkanRenderer::createDescriptorSets() {
         VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     descriptorWrites[1].descriptorCount = 1;
     descriptorWrites[1].pImageInfo = &depthImageInfo;
-
-    // Binding 2: Normal
-    descriptorWrites[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    descriptorWrites[2].dstSet = descriptorSets[i];
-    descriptorWrites[2].dstBinding = 2;
-    descriptorWrites[2].dstArrayElement = 0;
-    descriptorWrites[2].descriptorType =
-        VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    descriptorWrites[2].descriptorCount = 1;
-    descriptorWrites[2].pImageInfo = &normalImageInfo;
 
     // Execute the write to update the descriptor set on the GPU
     vkUpdateDescriptorSets(device,
@@ -1396,23 +1367,7 @@ void VulkanRenderer::createDescriptorSets() {
                            writes.data(), 0, nullptr);
   }
 
-  // Update RM descriptor sets to use depthDS output
-  for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-    VkDescriptorImageInfo depthInfo{};
-    depthInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    depthInfo.imageView = depthDSImageView;
-    depthInfo.sampler = depthTextureSampler;
 
-    VkWriteDescriptorSet write{};
-    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    write.dstSet = descriptorSets[i];
-    write.dstBinding = 1; // Replace original depth
-    write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    write.descriptorCount = 1;
-    write.pImageInfo = &depthInfo;
-
-    vkUpdateDescriptorSets(device, 1, &write, 0, nullptr);
-  }
 
   // Final descriptor sets (for upscaling/presenting)
   std::vector<VkDescriptorSetLayout> finalLayouts(MAX_FRAMES_IN_FLIGHT,
@@ -1953,11 +1908,12 @@ void VulkanRenderer::recordCommandBuffer(VkCommandBuffer commandBuffer,
   finalScissor.extent = swapchainExtent;
   vkCmdSetScissor(commandBuffer, 0, 1, &finalScissor);
 
-  // Update final descriptor set to read from the TNR2 output
+  // [DEBUG] Update final descriptor set to show depthDS linear depth output
   VkDescriptorImageInfo resultInfo{};
   resultInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-  resultInfo.imageView = tnr2ImageViews[1 - tnrHistoryIndex]; // TNR2_out0
-  // resultInfo.imageView = fresnelImageView; // TNR2_out0
+  // resultInfo.imageView = tnr2ImageViews[1 - tnrHistoryIndex]; // TNR2_out0
+  // resultInfo.imageView = fresnelImageView; // Fresnel
+  resultInfo.imageView = fresnelImageView; // [DEBUG] computeFresnel output
   resultInfo.sampler = offscreenSampler;
 
   VkDescriptorImageInfo colorInfo{};

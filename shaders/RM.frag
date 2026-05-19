@@ -2,7 +2,6 @@
 
 layout(binding = 0) uniform sampler2D texSampler;
 layout(binding = 1) uniform sampler2D depthSampler; // This is now the output from depthDS.frag
-layout(binding = 2) uniform sampler2D normalSampler; // Normals of the church scene
 
 layout(location = 0) in vec2 fragTexCoord;
 
