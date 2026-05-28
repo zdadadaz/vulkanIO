@@ -80,6 +80,17 @@ void VulkanRenderer::initWindow() {
   glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE); // Disable resizing for simplicity
   window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan Image Sequence Player",
                             nullptr, nullptr);
+  if (window == nullptr) {
+    throw std::runtime_error("failed to create GLFW window!");
+  }
+
+  glfwSetWindowUserPointer(window, this);
+  glfwSetKeyCallback(window, [](GLFWwindow* w, int key, int scancode, int action, int mods) {
+    if (action == GLFW_PRESS && key == GLFW_KEY_S) {
+      auto renderer = reinterpret_cast<VulkanRenderer*>(glfwGetWindowUserPointer(w));
+      renderer->requestDump();
+    }
+  });
 }
 
 // Master initialization function. Calls all the sub-init functions in the
@@ -518,8 +529,7 @@ void VulkanRenderer::createSwapchain() {
   createInfo.imageExtent = {WIDTH, HEIGHT}; // Resolution
   createInfo.imageArrayLayers = 1;          // Always 1 for 2D images
   createInfo.imageUsage =
-      VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT; // We will render directly to these
-                                           // images
+      VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT; // We will render directly to these and copy from them
   createInfo.imageSharingMode =
       VK_SHARING_MODE_EXCLUSIVE; // Only one queue needs access
   createInfo.preTransform =
@@ -1577,6 +1587,12 @@ void VulkanRenderer::drawFrame() {
   if (vkQueueSubmit(graphicsQueue, 1, &submitInfo,
                     inFlightFences[currentFrame]) != VK_SUCCESS) {
     throw std::runtime_error("failed to submit draw command buffer!");
+  }
+
+  if (dumpRequested) {
+    dumpRequested = false;
+    std::string filename = "data/dump_vulkan_" + std::to_string(currentFrameIndex) + ".raw";
+    dumpFrame(filename, imageIndex);
   }
 
   // 5. Present the image (Show it on screen)
@@ -3785,4 +3801,145 @@ void VulkanRenderer::createTNR2DescriptorSets() {
 
     vkUpdateDescriptorSets(device, 6, writes, 0, nullptr);
   }
+}
+
+void VulkanRenderer::requestDump() {
+  dumpRequested = true;
+}
+
+void VulkanRenderer::dumpFrame(const std::string& filename, uint32_t imageIndex) {
+  // Wait for graphics pipeline to finish drawing so swapchain image has final content
+  vkDeviceWaitIdle(device);
+
+  VkImage srcImage = swapchainImages[imageIndex];
+  uint32_t width = swapchainExtent.width;
+  uint32_t height = swapchainExtent.height;
+  VkDeviceSize imageSize = width * height * 4;
+
+  // Create CPU readable staging buffer to receive pixels
+  VkBuffer dstBuffer;
+  VkDeviceMemory dstBufferMemory;
+  createBuffer(imageSize, 
+               VK_BUFFER_USAGE_TRANSFER_DST_BIT, 
+               VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, 
+               dstBuffer, 
+               dstBufferMemory);
+
+  VkCommandBufferAllocateInfo allocInfo{};
+  allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+  allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+  allocInfo.commandPool = commandPool;
+  allocInfo.commandBufferCount = 1;
+
+  VkCommandBuffer commandBuffer;
+  if (vkAllocateCommandBuffers(device, &allocInfo, &commandBuffer) != VK_SUCCESS) {
+    throw std::runtime_error("failed to allocate command buffer for dumping frame!");
+  }
+
+  VkCommandBufferBeginInfo beginInfo{};
+  beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+  beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+  vkBeginCommandBuffer(commandBuffer, &beginInfo);
+
+  // Transition image layout from PRESENT_SRC_KHR to TRANSFER_SRC_OPTIMAL
+  VkImageMemoryBarrier barrier{};
+  barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+  barrier.oldLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+  barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+  barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  barrier.image = srcImage;
+  barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+  barrier.subresourceRange.baseMipLevel = 0;
+  barrier.subresourceRange.levelCount = 1;
+  barrier.subresourceRange.baseArrayLayer = 0;
+  barrier.subresourceRange.layerCount = 1;
+  barrier.srcAccessMask = 0;
+  barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+
+  vkCmdPipelineBarrier(commandBuffer,
+                       VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                       VK_PIPELINE_STAGE_TRANSFER_BIT,
+                       0, 0, nullptr, 0, nullptr, 1, &barrier);
+
+  // Copy from GPU image to CPU-visible buffer
+  VkBufferImageCopy region{};
+  region.bufferOffset = 0;
+  region.bufferRowLength = 0;
+  region.bufferImageHeight = 0;
+  region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+  region.imageSubresource.mipLevel = 0;
+  region.imageSubresource.baseArrayLayer = 0;
+  region.imageSubresource.layerCount = 1;
+  region.imageOffset = {0, 0, 0};
+  region.imageExtent = {width, height, 1};
+
+  vkCmdCopyImageToBuffer(commandBuffer, srcImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, dstBuffer, 1, &region);
+
+  // Transition layout back to PRESENT_SRC_KHR so it can be presented safely
+  barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+  barrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+  barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+  barrier.dstAccessMask = 0;
+
+  vkCmdPipelineBarrier(commandBuffer,
+                       VK_PIPELINE_STAGE_TRANSFER_BIT,
+                       VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+                       0, 0, nullptr, 0, nullptr, 1, &barrier);
+
+  vkEndCommandBuffer(commandBuffer);
+
+  VkSubmitInfo submitInfo{};
+  submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+  submitInfo.commandBufferCount = 1;
+  submitInfo.pCommandBuffers = &commandBuffer;
+
+  if (vkQueueSubmit(graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE) != VK_SUCCESS) {
+     throw std::runtime_error("failed to submit screen dump copy command!");
+  }
+  vkQueueWaitIdle(graphicsQueue);
+
+  vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
+
+  // Map buffer memory, check format, swap B and R if needed, and write to raw file
+  void* data;
+  vkMapMemory(device, dstBufferMemory, 0, imageSize, 0, &data);
+
+  uint8_t* pData = reinterpret_cast<uint8_t*>(data);
+
+  // Swap Red and Blue if format is BGRA
+  if (swapchainImageFormat == VK_FORMAT_B8G8R8A8_UNORM || 
+      swapchainImageFormat == VK_FORMAT_B8G8R8A8_SRGB ||
+      swapchainImageFormat == VK_FORMAT_B8G8R8A8_SNORM ||
+      swapchainImageFormat == VK_FORMAT_B8G8R8A8_UINT ||
+      swapchainImageFormat == VK_FORMAT_B8G8R8A8_SINT) {
+      for (uint32_t y = 0; y < height; ++y) {
+          for (uint32_t x = 0; x < width; ++x) {
+              uint64_t idx = (y * width + x) * 4;
+              uint8_t b = pData[idx + 0];
+              uint8_t g = pData[idx + 1];
+              uint8_t r = pData[idx + 2];
+              uint8_t a = pData[idx + 3];
+
+              pData[idx + 0] = r;
+              pData[idx + 1] = g;
+              pData[idx + 2] = b;
+              pData[idx + 3] = a;
+          }
+      }
+  }
+
+  std::ofstream out(filename, std::ios::out | std::ios::binary);
+  if (!out.is_open()) {
+      std::cerr << "Error: Failed to open dump file " << filename << std::endl;
+  } else {
+      out.write(reinterpret_cast<const char*>(pData), imageSize);
+      out.close();
+      std::cout << "Successfully dumped frame to " << filename << " (" << width << "x" << height << ", RGBA8888 raw format)" << std::endl;
+  }
+
+  vkUnmapMemory(device, dstBufferMemory);
+
+  vkDestroyBuffer(device, dstBuffer, nullptr);
+  vkFreeMemory(device, dstBufferMemory, nullptr);
 }

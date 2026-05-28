@@ -17,6 +17,7 @@
 class VulkanRenderer {
 public:
     void run();
+    void requestDump();
 
 private:
     // Window settings
@@ -217,6 +218,7 @@ private:
     int currentFrameIndex = 0;
     int frameDelayCounter = 0;
     const int frameDelay = 2; // Simple delay to control playback speed if needed
+    bool dumpRequested = false;
     
     void initWindow();
     void initVulkan();
@@ -280,6 +282,7 @@ private:
     // Rendering
     void drawFrame();
     void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
+    void dumpFrame(const std::string& filename, uint32_t imageIndex);
     
     // Texture Updating
     void updateTexture();
