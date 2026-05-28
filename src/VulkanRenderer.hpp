@@ -22,7 +22,7 @@ private:
     // Window settings
     const uint32_t WIDTH = 1920;
     const uint32_t HEIGHT = 864;
-    const uint32_t STRIDE = 1;
+    const uint32_t STRIDE = 4;
     const uint32_t RM_WIDTH = WIDTH / STRIDE;
     const uint32_t RM_HEIGHT = HEIGHT / STRIDE;
     

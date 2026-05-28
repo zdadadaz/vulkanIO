@@ -1908,13 +1908,11 @@ void VulkanRenderer::recordCommandBuffer(VkCommandBuffer commandBuffer,
   finalScissor.extent = swapchainExtent;
   vkCmdSetScissor(commandBuffer, 0, 1, &finalScissor);
 
-  // [DEBUG] Update final descriptor set to show depthDS linear depth output
+  // [DEBUG] Update final descriptor set to show mv (Motion Vector) output
   VkDescriptorImageInfo resultInfo{};
   resultInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-  // resultInfo.imageView = tnr2ImageViews[1 - tnrHistoryIndex]; // TNR2_out0
-  // resultInfo.imageView = fresnelImageView; // Fresnel
-  resultInfo.imageView = fresnelImageView; // [DEBUG] computeFresnel output
-  resultInfo.sampler = offscreenSampler;
+  resultInfo.imageView = mvTextureImageView; // [DEBUG] mv output
+  resultInfo.sampler = mvTextureSampler;
 
   VkDescriptorImageInfo colorInfo{};
   colorInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;

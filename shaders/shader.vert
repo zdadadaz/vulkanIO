@@ -22,5 +22,6 @@ vec2 texCoords[6] = vec2[](
 
 void main() {
     gl_Position = vec4(positions[gl_VertexIndex], 0.0, 1.0);
-    fragTexCoord = texCoords[gl_VertexIndex];
+    //fragTexCoord = texCoords[gl_VertexIndex];
+    fragTexCoord = vec2(texCoords[gl_VertexIndex].x, 1.0 - texCoords[gl_VertexIndex].y);
 }
